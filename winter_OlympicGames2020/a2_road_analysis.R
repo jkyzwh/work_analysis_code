@@ -62,8 +62,19 @@ for (i in 1:length(data_file_Name)){
 rm(oneSec_temp)
 
 #1.0 利用累计频率筛选准则，筛选出现概率较小的异常值-----------------------------
-test_data <- subset(allData_import,direction =="xiashan" && driver_ID == "S06")
+test_data <- subset(allData_import,direction =="xiashan" & driver_ID == "S06")
 test_data <- subset(test_data,speedKMH >= 1)
+
+# 将数据集分成相同长度的组别.
+groupNum <- floor(length(test_data$speedKMH)/1000)
+#ceiling向上取整，确定步长（floor为向下取整)
+stepLen <- ceiling(length(test_data$speedKMH)/groupNum)
+
+test_data$group <- 0
+for(i in 1:length(test_data$speedKMH)){
+  test_data$group[i] <- ceiling(i/stepLen)
+}
+
 
 if(!is.numeric(test_data$accZMS2)){
   test_data$accZMS2 <- as.numeric(test_data$accZMS2)
