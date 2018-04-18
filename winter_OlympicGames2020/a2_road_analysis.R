@@ -62,48 +62,72 @@ for (i in 1:length(data_file_Name)){
 rm(oneSec_temp)
 
 #1.0 利用累计频率筛选准则，筛选出现概率较小的异常值-----------------------------
-test_data <- subset(allData_import,direction =="xiashan" & driver_ID == "S06")
-test_data <- subset(test_data,speedKMH >= 1)
-
-# 将数据集分成相同长度的组别.
-groupNum <- floor(length(test_data$speedKMH)/1000)
-#ceiling向上取整，确定步长（floor为向下取整)
-stepLen <- ceiling(length(test_data$speedKMH)/groupNum)
-
-test_data$group <- 0
-for(i in 1:length(test_data$speedKMH)){
-  test_data$group[i] <- ceiling(i/stepLen)
-}
-
-
-if(!is.numeric(test_data$accZMS2)){
-  test_data$accZMS2 <- as.numeric(test_data$accZMS2)
-}
 
 #1.1. 定义函数fun_abnormalACC函数，计算加速和减速异常值标准-----------------------
-fun_abnormalACC<-function(data,probs=0.95)
+fun_abnormalACC<-function(simdata,speed_col,group_col,acc_col,gas_col,brake_col,probs=0.95)
 {
-  AAC<-subset(data,accZMS2 >0 & appGasPedal > 0)
-  DAC<-subset(data,accZMS2 <=0 & appBrake > 0)
-  a<-subset(DAC,select = c("Speed","speed_split"))
-  b1<-subset(AAC,select = c("speed_split","Acc_surge"))
-  b1<-ddply(b1,.(speed_split),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
-  b2<-subset(DAC,select = c("speed_split","Acc_surge"))
-  b2<-ddply(abs(b2),.(speed_split),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
-  names(b1)<-c("speed_split","ay_abnormalAAC")
-  names(b2)<-c("speed_split","ay_abnormalDAC")
-  c<-merge(b1,b2,all=T)
-  c$speed_bottom<-(c$speed_split-1)*10
-  c$speed_top<-c$speed_split*10
-  # c<-subset(c,selece=c("speed_split","speed_bottom","speed_top","ay_abnormalAAC","ay_abnormalDAC"))
+  simdata$acc <- as.numeric(simdata[[acc_col]])
+  simdata$GasPedal <- as.numeric(simdata[[gas_col]])
+  simdata$Brake <- as.numeric(simdata[[brake_col]])
+  simdata$speed <- as.numeric(simdata[[speed_col]])
+  simdata$group <- as.numeric(simdata[[group_col]])
+  
+  AAC <- subset(simdata,acc >0 & GasPedal > 0)
+  DAC <- subset(simdata,acc <0 & Brake > 0)
+  
+  b1 <- subset(AAC,select = c("group","acc"))
+  b1 <- ddply(b1,.(group),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
+  
+  b2 <- subset(DAC,select = c("group","acc"))
+  b2 <- ddply(abs(b2),.(group),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
+  
+  names(b1) <- c("group","abnormal_aac")
+  names(b2) <- c("group","abnormal_dac")
+  c <- merge(b1,b2,all=T)
+  c$speed_bottom <- 0
+  c$speed_top <- 0
+  
+  for(i in 1:length(c$group)){
+    d <- subset(simdata,group == i)
+    c$speed_bottom[i] <- floor(min(d$speed))
+    c$speed_top[i] <- ceiling(max(d$speed))
+  }
   return(c)
 }
 
+#  1.1.0 数据分组与计算加速度异常值的测试代码--------
+# test_data <- subset(allData_import,direction =="xiashan" & driver_ID == "S06")
+# test_data <- subset(test_data,speedKMH >= 1)
+# # 将数据集分成相同长度的组别.
+# groupNum <- floor(length(test_data$speedKMH)/1000)
+# #ceiling向上取整，确定步长（floor为向下取整)
+# test_data$speedKMH <- as.numeric(test_data$speedKMH)
+# stepLen <- ceiling((max(test_data$speedKMH)-min(test_data$speedKMH))/groupNum)
+# test_data$group <- ceiling(test_data$speedKMH/stepLen)
+# ab_acc <- fun_abnormalACC(test_data,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
 
-
-
-
-
+# 1.1.1 计算下山方向的加速度异常值判断标准-----------
+all_downHill <- subset(allData_import,direction =="xiashan")
+downHill_IDsplit<-split(all_downHill,list(all_downHill$driver_ID))#按照驾驶人ID分割数据
+abnormal_acc<-data.frame()
+for (i in 1:length(downHill_IDsplit))
+{
+  #选择一个驾驶人数据ID
+  aa<-data.frame(downHill_IDsplit[i])
+  #标准化数据框列名
+  names(aa)<-colnames(all_downHill)
+  # 将数据集分成相同长度的组别.
+  groupNum <- floor(length(aa$speedKMH)/1000)
+  #ceiling向上取整，确定步长（floor为向下取整)
+  aa$speedKMH <- as.numeric(aa$speedKMH)
+  stepLen <- ceiling((max(aa$speedKMH)-min(aa$speedKMH))/groupNum)
+  aa$group <- ceiling(aa$speedKMH/stepLen)
+  #调用函数计算加速和减速异常标准
+  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
+  cc$driver_ID<-aa$driver_ID[i] #增加驾驶人ID列
+  abnormal_acc<-rbind(cc,abnormal_acc)
+}
+rm(cc,aa,i)
 
 
 
