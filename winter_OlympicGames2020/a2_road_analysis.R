@@ -64,6 +64,7 @@ rm(oneSec_temp)
 #1.0 利用累计频率筛选准则，筛选出现概率较小的异常值-----------------------------
 
 #1.1. 定义函数fun_abnormalACC函数，计算加速和减速异常值标准-----------------------
+# speed_col等为传递的列名
 fun_abnormalACC<-function(simdata,speed_col,group_col,acc_col,gas_col,brake_col,probs=0.95)
 {
   simdata$acc <- as.numeric(simdata[[acc_col]])
@@ -128,6 +129,27 @@ for (i in 1:length(downHill_IDsplit))
   abnormal_acc<-rbind(cc,abnormal_acc)
 }
 rm(cc,aa,i)
+
+# 1.1.2 筛选加速度异常的数据
+driverID <- unique(all_downHill$driver_ID)
+downHill_abnormalAcc <- data.frame()
+# downHill_accSD<-split(abnormal_acc,list(abnormal_acc$driver_ID))#按照驾驶人ID分割数据
+for (i in 1:length(driverID)) {
+  #选择一个驾驶人数据ID
+  aa<-subset(all_downHill,driver_ID == driverID[i])
+  aa$speedKMH <- as.numeric(aa$speedKMH)
+  aa$accZMS2 <- as.numeric(aa$accZMS2)
+  accSD_driverID <- subset(abnormal_acc,driver_ID == driverID[i])
+  # 筛选异常数据
+  a <- data.frame()
+  for (j in length(accSD_driverID$group)) {
+      aa_acc <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
+                         speedKMH > accSD_driverID$speed_bottom[j] &
+                         accZMS2 >= accSD_driverID$abnormal_aac[j])
+      a <- rbind(aa_acc,a)
+  }
+  downHill_abnormalAcc <- rbind(a,downHill_abnormalAcc)
+}
 
 
 
