@@ -1,4 +1,4 @@
-#-------------------------------------------------------------------------------------------------
+#----------------------------------------------------------------------------------------------
 # 本程序用于北京冬奥会延庆赛区道路驾驶模拟试验数据分析
 #0.0 获取当前脚本所在的目录名称----
 # 便于加载位于同一目录下的其它文件
@@ -14,6 +14,7 @@ library(ggplot2)
 library(ggthemes)
 library(devtools) #加载 source_url 函数
 library(plyr)
+library(lubridate)
 
 # use R script file frome github
 source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.R") 
@@ -124,7 +125,7 @@ for (i in 1:length(downHill_IDsplit))
   stepLen <- ceiling((max(aa$speedKMH)-min(aa$speedKMH))/groupNum)
   aa$group <- ceiling(aa$speedKMH/stepLen)
   #调用函数计算加速和减速异常标准
-  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
+  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.98)
   cc$driver_ID<-aa$driver_ID[i] #增加驾驶人ID列
   abnormal_acc<-rbind(cc,abnormal_acc)
 }
@@ -135,29 +136,67 @@ driverID <- unique(all_downHill$driver_ID)
 downHill_abnormalAcc <- data.frame()
 # downHill_accSD<-split(abnormal_acc,list(abnormal_acc$driver_ID))#按照驾驶人ID分割数据
 for (i in 1:length(driverID)) {
-  #选择一个驾驶人数据ID
+  #  选择一个驾驶人数据ID
   aa<-subset(all_downHill,driver_ID == driverID[i])
   aa$speedKMH <- as.numeric(aa$speedKMH)
   aa$accZMS2 <- as.numeric(aa$accZMS2)
   accSD_driverID <- subset(abnormal_acc,driver_ID == driverID[i])
-  # 筛选异常数据
+  #  筛选异常数据
   a <- data.frame()
-  for (j in length(accSD_driverID$group)) {
-      aa_acc <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
-                         speedKMH > accSD_driverID$speed_bottom[j] &
-                         accZMS2 >= accSD_driverID$abnormal_aac[j])
-      a <- rbind(aa_acc,a)
+  for (j in 1:length(accSD_driverID$group)) {
+    #  筛选加速过程加速度异常
+    aa_acc <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
+                       speedKMH > accSD_driverID$speed_bottom[j] &
+                       accZMS2 >= accSD_driverID$abnormal_aac[j])
+    aa_acc$type <- "acc_A"
+    aa_acc$anbormalSD <- accSD_driverID$abnormal_aac[j]
+    #  筛选减速过程加速度异常  
+    aa_dac <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
+                       speedKMH > accSD_driverID$speed_bottom[j] &
+                       accZMS2 < 0 &
+                       abs(accZMS2) >= accSD_driverID$abnormal_dac[j])
+    aa_dac$type <- "acc_D"
+    aa_dac$anbormalSD <- accSD_driverID$abnormal_dac[j]
+    a <- rbind(aa_acc,a)
+    a <- rbind(aa_dac,a)
   }
   downHill_abnormalAcc <- rbind(a,downHill_abnormalAcc)
+  rm(a)
 }
+rm(aa,aa_acc,aa_dac,accSD_driverID,downHill_IDsplit)
 
+# 1.1.3 根据异常行为分布的点判断异常驾驶行为发生的路段,合并很接近的异常点，处理成异常行为路段
 
+a01 <- subset(downHill_abnormalAcc,driver_ID == driverID[1] &
+                type == "acc_D")
+a01$disFromRoadStart <- as.numeric(a01$disFromRoadStart)
+a01$logTime <- ymd_hms(a01$logTime)
+a01 <- a01[order(a01$logTime),]
+a01$dis_diff <- abs(c(0,diff(a01$disFromRoadStart)))
+a01$time_diff <- c(0,diff(a01$logTime))
 
+# 生成异常行为路段一览表
 
+Acc_colnames <- c("start","end","len","drive_time","speed_mean","adType",
+                 "value_max","value_SD")
+ACC_abData <- data.frame(matrix(0, ncol = length(Acc_colnames),nrow = 0))
+names(ACC_abData) <- Acc_colnames
+a01$rowNum <- seq(1,length(a01$logTime),1)
+aa01 <-subset(a01,time_diff > 10)
+rowNum <-c(1,aa01$rowNum)
 
-
-
-
+for(i in 1:length(rowNum)){
+  if(i ==1 ){
+    ACC_abData$start[i] <- a01$disFromRoadStart[i]
+    ACC_abData$end[i] <- a01$disFromRoadStart[rowNum[i+1]-1]
+    
+  }
+    
+   
+  
+  
+  
+}
 
 
 
