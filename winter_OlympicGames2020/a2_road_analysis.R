@@ -178,24 +178,24 @@ a01$time_diff <- c(0,diff(a01$logTime))
 # 生成异常行为路段一览表
 
 Acc_colnames <- c("start","end","len","drive_time","speed_mean","adType",
-                 "value_max","value_SD")
+                 "dac_max")
 ACC_abData <- data.frame(matrix(0, ncol = length(Acc_colnames),nrow = 0))
 names(ACC_abData) <- Acc_colnames
 a01$rowNum <- seq(1,length(a01$logTime),1)
 aa01 <-subset(a01,time_diff > 10)
-rowNum <-c(1,aa01$rowNum)
+rowNumber <-c(1,aa01$rowNum)
 
 for(i in 1:length(rowNum)){
-  if(i ==1 ){
-    ACC_abData$start[i] <- a01$disFromRoadStart[i]
-    ACC_abData$end[i] <- a01$disFromRoadStart[rowNum[i+1]-1]
-    
-  }
-    
-   
-  
-  
-  
+  ACC_abData$start[i] <- a01$disFromRoadStart[rowNumber[i]]
+  ACC_abData$end[i] <- a01$disFromRoadStart[rowNumber[i+1]-1]
+  ACC_abData$len[i] <- a01$disFromRoadStart[rowNumber[i+1]-1] - a01$disFromRoadStart[rowNumber[i]]
+  ACC_abData$drive_time[i] <- a01$logTime[rowNumber[i+1]-1]- a01$logTime[rowNumber[i]]
+  ACC_abData$speed_mean[i] <- mean(subset(a01,rowNum < rowNumber[i+1] & 
+                                            rowNum > rowNumber[i])$speedKMH)
+  ACC_abData$adType[i] <- a01$type[rowNumber[i]]
+  ACC_abData$dac_max[i] <- abs(max(subset(a01,rowNum < rowNumber[i+1] & 
+                                        rowNum > rowNumber[i])$accZMS2))
+  print(i)
 }
 
 
