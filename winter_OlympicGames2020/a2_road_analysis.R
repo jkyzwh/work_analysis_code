@@ -88,7 +88,6 @@ fun_abnormalACC<-function(simdata,speed_col,group_col,acc_col,gas_col,brake_col,
   c <- merge(b1,b2,all=T)
   c$speed_bottom <- 0
   c$speed_top <- 0
-  
   for(i in 1:length(c$group)){
     d <- subset(simdata,group == i)
     c$speed_bottom[i] <- floor(min(d$speed))
@@ -131,7 +130,7 @@ for (i in 1:length(downHill_IDsplit))
 }
 rm(cc,aa,i)
 
-# 1.1.2 筛选加速度异常的数据
+# 1.1.1.1 筛选加速度异常的数据--------------
 driverID <- unique(all_downHill$driver_ID)
 downHill_abnormalAcc <- data.frame()
 # downHill_accSD<-split(abnormal_acc,list(abnormal_acc$driver_ID))#按照驾驶人ID分割数据
@@ -163,40 +162,76 @@ for (i in 1:length(driverID)) {
   downHill_abnormalAcc <- rbind(a,downHill_abnormalAcc)
   rm(a)
 }
-rm(aa,aa_acc,aa_dac,accSD_driverID,downHill_IDsplit)
+rm(aa,aa_acc,aa_dac,accSD_driverID,downHill_IDsplit,i,j)
 
-# 1.1.3 根据异常行为分布的点判断异常驾驶行为发生的路段,合并很接近的异常点，处理成异常行为路段
+# 1.1.1.2 根据异常行为分布的点判断异常驾驶行为发生的路段,合并很接近的异常点，处理成异常行为路段-----------
+# 定义函数fun_ACC_abData 计算指定驾驶人编号和类型的异常驾驶行为路段
+# 参数表：
+  # a 为经过driver_ID和type筛选的异常驾驶行为数据点集
+  # timeDiff_SD为数据间隔多长时间视为不同的路段
 
-a01 <- subset(downHill_abnormalAcc,driver_ID == driverID[1] &
-                type == "acc_D")
-a01$disFromRoadStart <- as.numeric(a01$disFromRoadStart)
-a01$logTime <- ymd_hms(a01$logTime)
-a01 <- a01[order(a01$logTime),]
-a01$dis_diff <- abs(c(0,diff(a01$disFromRoadStart)))
-a01$time_diff <- c(0,diff(a01$logTime))
-
-# 生成异常行为路段一览表
-
-Acc_colnames <- c("start","end","len","drive_time","speed_mean","adType",
-                 "dac_max")
-ACC_abData <- data.frame(matrix(0, ncol = length(Acc_colnames),nrow = 0))
-names(ACC_abData) <- Acc_colnames
-a01$rowNum <- seq(1,length(a01$logTime),1)
-aa01 <-subset(a01,time_diff > 10)
-rowNumber <-c(1,aa01$rowNum)
-
-for(i in 1:length(rowNum)){
-  ACC_abData$start[i] <- a01$disFromRoadStart[rowNumber[i]]
-  ACC_abData$end[i] <- a01$disFromRoadStart[rowNumber[i+1]-1]
-  ACC_abData$len[i] <- a01$disFromRoadStart[rowNumber[i+1]-1] - a01$disFromRoadStart[rowNumber[i]]
-  ACC_abData$drive_time[i] <- a01$logTime[rowNumber[i+1]-1]- a01$logTime[rowNumber[i]]
-  ACC_abData$speed_mean[i] <- mean(subset(a01,rowNum < rowNumber[i+1] & 
-                                            rowNum > rowNumber[i])$speedKMH)
-  ACC_abData$adType[i] <- a01$type[rowNumber[i]]
-  ACC_abData$dac_max[i] <- abs(max(subset(a01,rowNum < rowNumber[i+1] & 
-                                        rowNum > rowNumber[i])$accZMS2))
-  print(i)
+fun_ACC_abData <- function(a,timeDiff_SD){
+  a$disFromRoadStart <- as.numeric(a$disFromRoadStart)
+  a$logTime <- ymd_hms(a$logTime)
+  a <- a[order(a$logTime),]
+  a$dis_diff <- abs(c(0,diff(a$disFromRoadStart)))
+  a$time_diff <- c(0,diff(a$logTime))
+  # 生成异常行为路段一览表
+  # 给所有的异常行为数据排序，添加编号
+  a$rowNum <- seq(1,length(a$logTime),1)
+  # 选择相邻时间大于10S的作为不同路段的判别，小于10s的作为一个路段处理
+  aa <-subset(a,time_diff > timeDiff_SD)
+  # 提取路段发生变换时数据的行编号
+  if(max(aa$rowNum) < length(a$rowNum)){
+    rowNumber <-c(1,aa$rowNum,length(a$rowNum))
+  }
+  if(max(aa$rowNum) == length(a$rowNum)){
+    rowNumber <-c(1,aa$rowNum)
+  }
+  #定义一个储存异常行为路段的数据框
+  Acc_colnames <- c("start","end","len","drive_time","speed_mean","adType","dac_max")
+  ACC_abData <- data.frame(matrix(0, ncol = length(Acc_colnames),nrow = (length(rowNumber)-1)))
+  names(ACC_abData) <- Acc_colnames
+  for(i in 1:(length(rowNumber)-1)){
+    ACC_abData$start[i] <- a$disFromRoadStart[rowNumber[i]]
+    ACC_abData$end[i] <- a$disFromRoadStart[rowNumber[i+1]-1]
+    if(ACC_abData$start[i] == ACC_abData$end[i ]){
+      ACC_abData$len[i] <- 1
+      ACC_abData$drive_time[i] <- 0
+      ACC_abData$speed_mean[i] <- a$speedKMH[rowNumber[i]]
+      ACC_abData$adType[i] <- a$type[rowNumber[i]]
+      ACC_abData$dac_max[i] <- abs(a$accZMS2[rowNumber[i]])
+    }
+    if(abs(ACC_abData$end[i]-ACC_abData$start[i]) > 0){
+      ACC_abData$len[i] <- a$disFromRoadStart[rowNumber[i+1]-1] - a$disFromRoadStart[rowNumber[i]]
+      ACC_abData$drive_time[i] <- a$logTime[rowNumber[i+1]-1]- a$logTime[rowNumber[i]]
+      ACC_abData$speed_mean[i] <- mean(subset(a,rowNum < rowNumber[i+1] & 
+                                                rowNum > rowNumber[i])$speedKMH)
+      ACC_abData$adType[i] <- a$type[rowNumber[i]]
+      ACC_abData$dac_max[i] <- abs(max(subset(a,rowNum < rowNumber[i+1] & 
+                                                rowNum > rowNumber[i])$accZMS2))
+    }
+    #if(i=)
+  }
+  ACC_abData$len <- abs(ACC_abData$len)
+  return(ACC_abData)
 }
+
+# 计算不同驾驶人下山方向异常驾驶行为路段的合集
+ACC_abData <- data.frame()
+for(i in 1:length(driverID)){
+  #print(i)
+  a <- subset(downHill_abnormalAcc,driver_ID == driverID[i] &
+                type == "acc_D")
+  b <- fun_ACC_abData(a,10) #调用函数计算异常驾驶行为路段
+  b$direction <- "xiashan"
+  b$driver_ID <- driverID[i]
+  ACC_abData <- rbind(b,ACC_abData)
+}
+rm(a,b,i)  
+  
+  
+  
 
 
 
