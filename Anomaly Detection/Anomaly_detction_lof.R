@@ -8,9 +8,25 @@
 #lofactor()函数中，k是用于计算局部异常因子的邻居数量。
 ##################
 
-# 安装需要的包
-if (!require('DMwR')){ install.packages('DMwR')}
-if (!require('rstudioapi')){ install.packages('rstudioapi')}
+# 如果需要的包没有被安装，则安装需要的包
+#if (!require('DMwR')){ install.packages('DMwR')}
+#if (!require('rstudioapi')){ install.packages('rstudioapi')}
+
+packages_needed <- c('DMwR',
+                     'rstudioapi',
+                     'data.table',
+                     'outliers',
+                     'stringr',
+                     'ggplot2',
+                     'ggthemes',
+                     'devtools',
+                     'plyr',
+                     'lubridate'
+                     )
+installed <- packages_needed %in% installed.packages()[, 'Package']
+if (length(packages_needed[!installed]) >=1){
+  install.packages(packages_needed[!installed])
+}
 
 #0.0 获取当前脚本所在的目录名称----
 # 便于加载位于同一目录下的其它文件
@@ -27,6 +43,7 @@ library(ggthemes)
 library(devtools) #加载 source_url 函数
 library(plyr)
 library(lubridate)
+library(DMwR)
 
 # use R script file frome github
 source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.R") 
@@ -75,17 +92,19 @@ for (i in 1:length(data_file_Name)){
 rm(oneSec_temp)
 
 # 1.0 使用LOF算法提取异常值
+
 driverID <- unique(allData_import$driver_ID)
 a <- subset(allData_import,driver_ID == driverID[1])
 a$accZMS2 <- as.numeric(a$accZMS2)
 
 a <- subset(a,accZMS2<0 & direction == "xiashan")
 
-b <- lofactor(as.numeric(a$accZMS2),k=5)
+b <- lofactor(as.numeric(a$accZMS2),k=100) #以临近200个数据为基准，利用密度分析筛选异常值
 
-plot(density(b))
-c<- order(b,decreasing = T)[1:10]
-d <- a[c,]
-
+# plot(density(b))
+c<- order(b,decreasing = T)[1:10] #排在前十的异常值行号
+d <- a[c,] # 选择排序为前十的异常值
+#经过比较，lof方法与按绝对值排序得到的是一致的，不处理的话与排序取较大值的结果是一致的
+e <- a[order(a$accZMS2),]
 
          
