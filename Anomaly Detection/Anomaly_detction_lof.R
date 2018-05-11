@@ -93,18 +93,17 @@ rm(oneSec_temp)
 
 # 1.0 使用LOF算法提取异常值
 
-driverID <- unique(allData_import$driver_ID)
+driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
 a <- subset(allData_import,driver_ID == driverID[1])
 a$accZMS2 <- as.numeric(a$accZMS2)
+a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
+a <- Order.dis(a,"disFromRoadStart") #按桩号排序
+b <- lofactor(abs(a$accZMS2),k=12) #以临近200个数据为基准，利用密度分析筛选异常值
 
-a <- subset(a,accZMS2<0 & direction == "xiashan")
-
-b <- lofactor(as.numeric(a$accZMS2),k=100) #以临近200个数据为基准，利用密度分析筛选异常值
-
-# plot(density(b))
-c<- order(b,decreasing = T)[1:10] #排在前十的异常值行号
+plot(density(b))
+c<- order(b,decreasing = T)[1:30] #排在前十的异常值行号
 d <- a[c,] # 选择排序为前十的异常值
 #经过比较，lof方法与按绝对值排序得到的是一致的，不处理的话与排序取较大值的结果是一致的
-e <- a[order(a$accZMS2),]
+e <- a[order(a$appBrake),]
 
          
