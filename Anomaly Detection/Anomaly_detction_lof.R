@@ -96,6 +96,7 @@ rm(oneSec_temp)
 driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
 a <- subset(allData_import,driver_ID == driverID[1])
 a$accZMS2 <- as.numeric(a$accZMS2)
+a$appBrake <- as.numeric(a$appBrake)
 a$Brake_dif <- c(0,diff(a$appBrake))
 a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
 a <- subset(a,appBrake>0)
