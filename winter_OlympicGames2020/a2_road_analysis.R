@@ -2,6 +2,23 @@
 # 本程序用于北京冬奥会延庆赛区道路驾驶模拟试验数据分析
 #0.0 获取当前脚本所在的目录名称----
 # 便于加载位于同一目录下的其它文件
+
+# 如果需要的包没有被安装，则安装需要的包
+packages_needed <- c('outliers',
+                     'rstudioapi',
+                     'data.table',
+                     'outliers',
+                     'stringr',
+                     'ggplot2',
+                     'ggthemes',
+                     'devtools',
+                     'plyr',
+                     'lubridate'
+                     )
+installed <- packages_needed %in% installed.packages()[, 'Package']
+if (length(packages_needed[!installed]) >=1){
+  install.packages(packages_needed[!installed])
+}
 library(rstudioapi)    
 file_dir <- dirname(rstudioapi::getActiveDocumentContext()$path)
 OStype <- Sys.info()['sysname']

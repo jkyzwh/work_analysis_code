@@ -27,7 +27,7 @@ installed <- packages_needed %in% installed.packages()[, 'Package']
 if (length(packages_needed[!installed]) >=1){
   install.packages(packages_needed[!installed])
 }
-
+rm(installed,packages_needed)
 #0.0 获取当前脚本所在的目录名称----
 # 便于加载位于同一目录下的其它文件
 library(rstudioapi)    
