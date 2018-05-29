@@ -93,14 +93,21 @@ rm(oneSec_temp)
 
 # 1.0 使用LOF算法提取异常值
 
+
 driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
 a <- subset(allData_import,driver_ID == driverID[1])
 a$accZMS2 <- as.numeric(a$accZMS2)
 a$appBrake <- as.numeric(a$appBrake)
-a$Brake_dif <- c(0,diff(a$appBrake))
+a$appSteering <- as.numeric(a$appSteering)
+#cacelate diff of brake and steering
+a$logTime <- as.numeric(as.POSIXlt(a$logTime))
+a <- Order.dis(a,"logTime") #按timw排序
+a$Brake_diff <- c(0,diff(a$appBrake))
+a$steering_diff <- c(0,diff(a$appSteering))
+
 a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
 a <- subset(a,appBrake>0)
-a <- Order.dis(a,"disFromRoadStart") #按桩号排序
+
 b <- lofactor(abs(a$accZMS2),k=12) #以临近200个数据为基准，利用密度分析筛选异常值
 
 plot(density(b))
