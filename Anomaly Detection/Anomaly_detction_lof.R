@@ -99,7 +99,7 @@ a <- subset(allData_import,driver_ID == driverID[1])
 a$accZMS2 <- as.numeric(a$accZMS2)
 a$appBrake <- as.numeric(a$appBrake)
 a$appSteering <- as.numeric(a$appSteering)
-#cacelate diff of brake and steering
+#计算制动踏板和方向盘转角相对于时间的变化率
 a$logTime <- as.numeric(as.POSIXlt(a$logTime))
 a <- Order.dis(a,"logTime") #按timw排序
 a$Brake_diff <- c(0,diff(a$appBrake))
