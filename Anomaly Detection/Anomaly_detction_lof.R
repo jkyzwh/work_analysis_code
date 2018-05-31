@@ -100,15 +100,24 @@ a$accZMS2 <- as.numeric(a$accZMS2)
 a$appBrake <- as.numeric(a$appBrake)
 a$appSteering <- as.numeric(a$appSteering)
 #计算制动踏板和方向盘转角相对于时间的变化率
+a <- subset(a,direction == "xiashan")
 a$logTime <- as.numeric(as.POSIXlt(a$logTime))
-a <- Order.dis(a,"logTime") #按timw排序
-a$Brake_diff <- c(0,diff(a$appBrake))
-a$steering_diff <- c(0,diff(a$appSteering))
+a$time_diff <- c(0,diff(a$logTime))
+#a <- Order.dis(a,"logTime",) #按时间排序
+a$Brake_diff <- c(0,diff(a$appBrake))/a$time_diff
+a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
+
+# 将N/A值转化为0，时间差为零的数值
+a[is.na(a)]<-0 
+# 计算12s行程对应的k值
+k <- floor(abs(a$logTime[length(a$logTime)]-a$logTime[1])/12)
+b <- lofactor(abs(a$Brake_diff),k) #以临近200个数据为基准，利用密度分析筛选异常值
+b[is.na(b)]<-0 
 
 a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
 a <- subset(a,appBrake>0)
 
-b <- lofactor(abs(a$accZMS2),k=12) #以临近200个数据为基准，利用密度分析筛选异常值
+
 
 plot(density(b))
 c<- order(b,decreasing = T)[1:30] #排在前十的异常值行号
