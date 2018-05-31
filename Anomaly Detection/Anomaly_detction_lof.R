@@ -109,9 +109,9 @@ a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
 
 # 将N/A值转化为0，时间差为零的数值
 a[is.na(a)]<-0 
-# 计算12s行程对应的k值
-k <- floor(abs(a$logTime[length(a$logTime)]-a$logTime[1])/12)
-b <- lofactor(abs(a$Brake_diff),k) #以临近200个数据为基准，利用密度分析筛选异常值
+# 计算12s行程对应的k值,6s driving
+k <- floor(length(a$logTime)/(floor(abs(a$logTime[length(a$logTime)]-a$logTime[1])/6)))
+b <- lofactor(a$Brake_diff,k) #以临近200个数据为基准，利用密度分析筛选异常值
 b[is.na(b)]<-0 
 
 a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
