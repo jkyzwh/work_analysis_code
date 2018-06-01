@@ -21,7 +21,9 @@ packages_needed <- c('DMwR',
                      'ggthemes',
                      'devtools',
                      'plyr',
-                     'lubridate'
+                     'lubridate',
+                     'dprep',
+                     'Rlof'
                      )
 installed <- packages_needed %in% installed.packages()[, 'Package']
 if (length(packages_needed[!installed]) >=1){
@@ -44,6 +46,8 @@ library(devtools) #加载 source_url 函数
 library(plyr)
 library(lubridate)
 library(DMwR)
+library(dprep)
+library(Rlof)
 
 # use R script file frome github
 source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.R") 
@@ -103,17 +107,21 @@ a$appSteering <- as.numeric(a$appSteering)
 a <- subset(a,direction == "xiashan")
 a$logTime <- as.numeric(as.POSIXlt(a$logTime))
 a$time_diff <- c(0,diff(a$logTime))
-#a <- Order.dis(a,"logTime",) #按时间排序
+a <- Order.dis(a,"logTime",) #按时间排序
 a$Brake_diff <- c(0,diff(a$appBrake))/a$time_diff
 a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
 
 # 将N/A值转化为0，时间差为零的数值
-a[is.na(a)]<-0 
+a[is.na(a)]<-0.0 
 # 计算12s行程对应的k值,6s driving
-k <- floor(length(a$logTime)/(floor(abs(a$logTime[length(a$logTime)]-a$logTime[1])/6)))
-b <- lofactor(a$Brake_diff,k) #以临近200个数据为基准，利用密度分析筛选异常值
-b[is.na(b)]<-0 
+k_step <- 12 # 进行一次识别考虑的时间长度
+k1 <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
+k1 <- floor(k1/k_step) # # 进行一次识别考虑的周边数据数量
 
+#b <- lofactor(a$Brake_diff,k=10) #以临近200个数据为基准，利用密度分析筛选异常值
+b <- lof(a$Brake_diff,c(6,12,64,128))
+b[is.na(b)]<-0 
+a$brake_lof <- b
 a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
 a <- subset(a,appBrake>0)
 
