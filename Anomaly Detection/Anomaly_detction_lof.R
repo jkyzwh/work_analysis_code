@@ -99,7 +99,7 @@ rm(oneSec_temp)
 
 
 driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
-a <- subset(allData_import,driver_ID == driverID[1])
+a <- subset(allData_import,driver_ID == driverID[2])
 a$accZMS2 <- as.numeric(a$accZMS2)
 a$appBrake <- as.numeric(a$appBrake)
 a$appSteering <- as.numeric(a$appSteering)
@@ -107,18 +107,49 @@ a$appSteering <- as.numeric(a$appSteering)
 a <- subset(a,direction == "xiashan")
 a$logTime <- as.numeric(as.POSIXlt(a$logTime))
 a$time_diff <- c(0,diff(a$logTime))
-a <- Order.dis(a,"logTime",) #按时间排序
+a <- Order.dis(a,"logTime") #按时间排序
 a$Brake_diff <- c(0,diff(a$appBrake))/a$time_diff
 a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
 
-# 将N/A值转化为0，时间差为零的数值
-a[is.na(a)]<-0.0 
+
 # 计算12s行程对应的k值,6s driving
 k_step <- 12 # 进行一次识别考虑的时间长度
-k1 <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
-k1 <- floor(k1/k_step) # # 进行一次识别考虑的周边数据数量
+k <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
+k <- floor(k/k_step) # # 进行一次识别考虑的周边数据数量
 
 #b <- lofactor(a$Brake_diff,k=10) #以临近200个数据为基准，利用密度分析筛选异常值
+
+
+Unzero_Brakediff <- function(a){
+  a <- as.numeric(a)
+  if (a == 0) {a <- runif(1, min = -0.001, max = 0.001)}
+  if (a != 0) {a <- a}
+  return(a)
+}
+
+Unzero_AppBrake <- function(a){
+  a <- as.numeric(a)
+  if (a == 0) {a <- runif(1, min = 0, max = 0.001)}
+  if (a != 0) {a <- a}
+  return(a)
+}
+# 将N/A值转化为0，时间差为零的数值
+a[is.na(a)]<-0.0
+a$Brake_diff <- Map(Unzero_Brakediff,a$Brake_diff)
+a$Brake_diff <- as.numeric(a$Brake_diff)
+b <- lof(a$Brake_diff,k)
+
+a$Brake_diff_lof <- lof(a$Brake_diff,k)
+
+a$appBrake <- Map(Unzero_AppBrake,a$appBrake)
+a$appBrake <- as.numeric(a$appBrake)
+a$appBrake_lof <- lof(a$appBrake,k)
+
+
+length(subset(a,Brake_diff == 0)$Brake_diff)
+
+a[Brake_diff == 0]
+
 b <- lof(a$Brake_diff,c(6,12,64,128))
 b[is.na(b)]<-0 
 a$brake_lof <- b
