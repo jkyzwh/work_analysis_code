@@ -97,8 +97,54 @@ rm(oneSec_temp)
 
 # 1.0 使用LOF算法提取异常值
 
+# 计算12s行程对应的k值,6s driving
+k_step <- 12 # 进行一次识别考虑的时间长度
+k <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
+k <- floor(k/k_step) # # 进行一次识别考虑的周边数据数量
 
 driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
+
+Unzero_Brakediff <- function(a){
+  a <- as.numeric(a)
+  if (a == 0) {a <- runif(1, min = -0.0001, max = 0.0001)}
+  if (a != 0) {a <- a}
+  return(a)
+}
+
+Unzero_AppBrake <- function(a){
+  a <- as.numeric(a)
+  if (a == 0) {a <- runif(1, min = 0, max = 0.001)}
+  if (a != 0) {a <- a}
+  return(a)
+}
+
+for (i in length(driverID)) {
+  diver_i <- subset(allData_import,driver_ID == driverID[i])
+  diver_i$accZMS2 <- as.numeric(diver_i$accZMS2)
+  diver_i$appBrake <- as.numeric(diver_i$appBrake)
+  diver_i$appSteering <- as.numeric(diver_i$appSteering)
+  #计算制动踏板和方向盘转角相对于时间的变化率
+  diver_i <- subset(diver_i,direction == "xiashan")
+  diver_i$logTime <- as.numeric(as.POSIXlt(diver_i$logTime))
+  diver_i$time_diff <- c(0,diff(diver_i$logTime))
+  diver_i <- Order.dis(diver_i,"logTime") #按时间排序
+  diver_i$Brake_diff <- c(0,diff(diver_i$appBrake))/diver_i$time_diff
+  diver_i$steering_diff <- c(0,diff(diver_i$appSteering))/diver_i$time_diff
+  
+  diver_i[is.na(diver_i)]<-0.0
+  diver_i$Brake_diff <- Map(Unzero_Brakediff,diver_i$Brake_diff)
+  diver_i$Brake_diff <- as.numeric(diver_i$Brake_diff)
+  diver_i$Brake_diff_lof <- lof(diver_i$Brake_diff,k)
+  diver_i$steering_diff <- Map(Unzero_Brakediff,diver_i$steering_diff)
+  diver_i$steering_diff <-as.numeric(diver_i$steering_diff)
+  diver_i$steering_diff_lof <- lof(diver_i$steering_diff,k)
+  
+  View(diver_i)
+}
+
+
+
+
 a <- subset(allData_import,driver_ID == driverID[2])
 a$accZMS2 <- as.numeric(a$accZMS2)
 a$appBrake <- as.numeric(a$appBrake)
@@ -112,17 +158,12 @@ a$Brake_diff <- c(0,diff(a$appBrake))/a$time_diff
 a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
 
 
-# 计算12s行程对应的k值,6s driving
-k_step <- 12 # 进行一次识别考虑的时间长度
-k <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
-k <- floor(k/k_step) # # 进行一次识别考虑的周边数据数量
+
 
 #b <- lofactor(a$Brake_diff,k=10) #以临近200个数据为基准，利用密度分析筛选异常值
-
-
 Unzero_Brakediff <- function(a){
   a <- as.numeric(a)
-  if (a == 0) {a <- runif(1, min = -0.001, max = 0.001)}
+  if (a == 0) {a <- runif(1, min = -0.0001, max = 0.0001)}
   if (a != 0) {a <- a}
   return(a)
 }
@@ -140,6 +181,7 @@ a$Brake_diff <- as.numeric(a$Brake_diff)
 b <- lof(a$Brake_diff,k)
 
 a$Brake_diff_lof <- lof(a$Brake_diff,k)
+a$steering_diff_lof <- lof(a$steering_diff,k)
 
 a$appBrake <- Map(Unzero_AppBrake,a$appBrake)
 a$appBrake <- as.numeric(a$appBrake)
