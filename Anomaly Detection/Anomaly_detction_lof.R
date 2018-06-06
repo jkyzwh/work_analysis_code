@@ -142,55 +142,15 @@ for (i in 1:length(driverID)) {
   
   print(i)
   print(length(subset(driver_i,Brake_diff_lof > 2)$Brake_diff_lof))
-  print(quantile(driver_i$Brake_diff_lof,probs=c(0.9),na.rm = TRUE))
+  print(quantile(driver_i$Brake_diff_lof,probs=c(0.95),na.rm = TRUE))
 }
 
 
-
-#b <- lofactor(a$Brake_diff,k=10) #以临近200个数据为基准，利用密度分析筛选异常值
-Unzero_Brakediff <- function(a){
-  a <- as.numeric(a)
-  if (a == 0) {a <- runif(1, min = -0.0001, max = 0.0001)}
-  if (a != 0) {a <- a}
-  return(a)
-}
-
-Unzero_AppBrake <- function(a){
-  a <- as.numeric(a)
-  if (a == 0) {a <- runif(1, min = 0, max = 0.001)}
-  if (a != 0) {a <- a}
-  return(a)
-}
-# 将N/A值转化为0，时间差为零的数值
-a[is.na(a)]<-0.0
-a$Brake_diff <- Map(Unzero_Brakediff,a$Brake_diff)
-a$Brake_diff <- as.numeric(a$Brake_diff)
-b <- lof(a$Brake_diff,k)
-
-a$Brake_diff_lof <- lof(a$Brake_diff,k)
-a$steering_diff_lof <- lof(a$steering_diff,k)
-
-a$appBrake <- Map(Unzero_AppBrake,a$appBrake)
-a$appBrake <- as.numeric(a$appBrake)
-a$appBrake_lof <- lof(a$appBrake,k)
-
-
-length(subset(a,Brake_diff == 0)$Brake_diff)
-
-a[Brake_diff == 0]
-
-b <- lof(a$Brake_diff,c(6,12,64,128))
-b[is.na(b)]<-0 
-a$brake_lof <- b
-a <- subset(a,accZMS2 < -1.0 & direction == "xiashan")
-a <- subset(a,appBrake>0)
-
-
-
-plot(density(b))
-c<- order(b,decreasing = T)[1:30] #排在前十的异常值行号
-d <- a[c,] # 选择排序为前十的异常值
-#经过比较，lof方法与按绝对值排序得到的是一致的，不处理的话与排序取较大值的结果是一致的
-e <- a[order(a$appBrake),]
+lofNum <- length(driver_i$Brake_diff_lof)*0.05
+#选择5%lof异常因子最大的数据
+c <- order(driver_i$Brake_diff_lof,decreasing = T) 
+c <- c[1:lofNum]
+d <- driver_i[c,] # 选择排序为5%的异常值
+d <- subset(d,accZMS2<0)
 
          
