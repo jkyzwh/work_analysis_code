@@ -50,12 +50,14 @@ library(dprep)
 library(Rlof)
 
 # use R script file frome github
-source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.R") 
+#source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.R") 
 
 #加载位于上一级文件夹中的basicFun.R脚本文件，加载常用的基本函数，例如排序函数等
 pass_off <- as.data.frame(str_locate_all(file_dir,"/"))
 pass_off_2 <-pass_off$start[length(pass_off$start)]
 source(paste(str_sub(file_dir,1,pass_off_2),"basicFun.R",sep = ''))
+source(paste(str_sub(file_dir,1,pass_off_2),"DataInitialization.R",sep = ''))
+
 rm(pass_off,pass_off_2)
 
 #根据操作系统类型，在不同路径加载数据集
@@ -97,66 +99,51 @@ rm(oneSec_temp)
 
 # 1.0 使用LOF算法提取异常值
 
-# 计算12s行程对应的k值,6s driving
-k_step <- 12 # 进行一次识别考虑的时间长度
-k <- abs(a$logTime[length(a$logTime)]-a$logTime[1])# 数据起始记录至终止记录，数据集的时间长度
-k <- floor(k/k_step) # # 进行一次识别考虑的周边数据数量
-
 driverID <- unique(allData_import$driver_ID) #提取驾驶人的ID列表
+# 先计算下坡方向
+Data_xiashan <- subset(allData_import,direction == "xiashan")
 
-Unzero_Brakediff <- function(a){
+Unzero_diff <- function(a){
   a <- as.numeric(a)
   if (a == 0) {a <- runif(1, min = -0.0001, max = 0.0001)}
   if (a != 0) {a <- a}
   return(a)
 }
 
-Unzero_AppBrake <- function(a){
-  a <- as.numeric(a)
-  if (a == 0) {a <- runif(1, min = 0, max = 0.001)}
-  if (a != 0) {a <- a}
-  return(a)
-}
+# 计算12s行程对应的k值,6s driving
+k_step <- 12 # 进行一次识别考虑的时间长度
 
-for (i in length(driverID)) {
-  diver_i <- subset(allData_import,driver_ID == driverID[i])
-  diver_i$accZMS2 <- as.numeric(diver_i$accZMS2)
-  diver_i$appBrake <- as.numeric(diver_i$appBrake)
-  diver_i$appSteering <- as.numeric(diver_i$appSteering)
+for (i in 1:length(driverID)) {
+  driver_i <- subset(Data_xiashan,driver_ID == driverID[i])
+  driver_i$logTime <- as.numeric(as.POSIXlt(driver_i$logTime))
+  driver_i <- Order.dis(driver_i,"disFromRoadStart") #按桩号排序
+  
+  # 数据起始记录至终止记录，数据集的时间长度
+  k <- abs(driver_i$logTime[length(driver_i$logTime)]-driver_i$logTime[1])
+  k <- floor(k/k_step) # # 进行一次识别考虑的周边数据数量
+  
+  driver_i$accZMS2 <- as.numeric(driver_i$accZMS2)
+  driver_i$appBrake <- as.numeric(driver_i$appBrake)
+  driver_i$appSteering <- as.numeric(driver_i$appSteering)
   #计算制动踏板和方向盘转角相对于时间的变化率
-  diver_i <- subset(diver_i,direction == "xiashan")
-  diver_i$logTime <- as.numeric(as.POSIXlt(diver_i$logTime))
-  diver_i$time_diff <- c(0,diff(diver_i$logTime))
-  diver_i <- Order.dis(diver_i,"logTime") #按时间排序
-  diver_i$Brake_diff <- c(0,diff(diver_i$appBrake))/diver_i$time_diff
-  diver_i$steering_diff <- c(0,diff(diver_i$appSteering))/diver_i$time_diff
   
-  diver_i[is.na(diver_i)]<-0.0
-  diver_i$Brake_diff <- Map(Unzero_Brakediff,diver_i$Brake_diff)
-  diver_i$Brake_diff <- as.numeric(diver_i$Brake_diff)
-  diver_i$Brake_diff_lof <- lof(diver_i$Brake_diff,k)
-  diver_i$steering_diff <- Map(Unzero_Brakediff,diver_i$steering_diff)
-  diver_i$steering_diff <-as.numeric(diver_i$steering_diff)
-  diver_i$steering_diff_lof <- lof(diver_i$steering_diff,k)
+  driver_i$time_diff <- c(diff(driver_i$logTime),0.0001)
+  driver_i$Brake_diff <- c(diff(driver_i$appBrake),0)/driver_i$time_diff
   
-  View(diver_i)
+  driver_i$steering_diff <- c(diff(driver_i$appSteering),0)/driver_i$time_diff
+  
+  driver_i[is.na(driver_i)]<-0.0
+  driver_i$Brake_diff <- Map(Unzero_diff,driver_i$Brake_diff)
+  driver_i$Brake_diff <- as.numeric(driver_i$Brake_diff)
+  driver_i$Brake_diff_lof <- lof(driver_i$Brake_diff,k)
+  driver_i$steering_diff <- Map(Unzero_diff,driver_i$steering_diff)
+  driver_i$steering_diff <-as.numeric(driver_i$steering_diff)
+  driver_i$steering_diff_lof <- lof(driver_i$steering_diff,k)
+  
+  print(i)
+  print(length(subset(driver_i,Brake_diff_lof > 2)$Brake_diff_lof))
+  print(quantile(driver_i$Brake_diff_lof,probs=c(0.9),na.rm = TRUE))
 }
-
-
-
-
-a <- subset(allData_import,driver_ID == driverID[2])
-a$accZMS2 <- as.numeric(a$accZMS2)
-a$appBrake <- as.numeric(a$appBrake)
-a$appSteering <- as.numeric(a$appSteering)
-#计算制动踏板和方向盘转角相对于时间的变化率
-a <- subset(a,direction == "xiashan")
-a$logTime <- as.numeric(as.POSIXlt(a$logTime))
-a$time_diff <- c(0,diff(a$logTime))
-a <- Order.dis(a,"logTime") #按时间排序
-a$Brake_diff <- c(0,diff(a$appBrake))/a$time_diff
-a$steering_diff <- c(0,diff(a$appSteering))/a$time_diff
-
 
 
 
