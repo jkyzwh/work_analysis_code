@@ -111,7 +111,9 @@ Unzero_diff <- function(a){
 }
 
 # 计算12s行程对应的k值,6s driving
-k_step <- 12 # 进行一次识别考虑的时间长度
+k_step <- 8 # 进行一次识别考虑的时间长度
+
+closeAllConnections()
 
 for (i in 1:length(driverID)) {
   driver_i <- subset(Data_xiashan,driver_ID == driverID[i])
