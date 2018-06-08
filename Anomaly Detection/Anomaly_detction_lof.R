@@ -111,9 +111,10 @@ Unzero_diff <- function(a){
 }
 
 # 计算12s行程对应的k值,6s driving
-k_step <- 8 # 进行一次识别考虑的时间长度
+k_step <- 12 # 进行一次识别考虑的时间长度
 
 closeAllConnections()
+lof_dac<-data.frame()
 
 for (i in 1:length(driverID)) {
   driver_i <- subset(Data_xiashan,driver_ID == driverID[i])
@@ -142,17 +143,19 @@ for (i in 1:length(driverID)) {
   driver_i$steering_diff <-as.numeric(driver_i$steering_diff)
   driver_i$steering_diff_lof <- lof(driver_i$steering_diff,k)
   
+  lofNum <- length(driver_i$Brake_diff_lof)*0.05
+  #选择5%lof异常因子最大的数据
+  c <- order(driver_i$Brake_diff_lof,decreasing = T) 
+  c <- c[1:lofNum]
+  d <- driver_i[c,] # 选择排序为5%的异常值
+  d <- subset(d,accZMS2<0)
+  lof_dac<-rbind(d,lof_dac)
   print(i)
-  print(length(subset(driver_i,Brake_diff_lof > 2)$Brake_diff_lof))
-  print(quantile(driver_i$Brake_diff_lof,probs=c(0.95),na.rm = TRUE))
+  #print(length(subset(driver_i,Brake_diff_lof > 2)$Brake_diff_lof))
+  #print(quantile(driver_i$Brake_diff_lof,probs=c(0.95),na.rm = TRUE))
 }
 
+rm(c,d)
 
-lofNum <- length(driver_i$Brake_diff_lof)*0.05
-#选择5%lof异常因子最大的数据
-c <- order(driver_i$Brake_diff_lof,decreasing = T) 
-c <- c[1:lofNum]
-d <- driver_i[c,] # 选择排序为5%的异常值
-d <- subset(d,accZMS2<0)
 
          
