@@ -22,7 +22,7 @@ packages_needed <- c('DMwR',
                      'devtools',
                      'plyr',
                      'lubridate',
-                     'dprep',
+                     #'dprep',
                      'Rlof'
                      )
 installed <- packages_needed %in% installed.packages()[, 'Package']
@@ -46,7 +46,7 @@ library(devtools) #加载 source_url 函数
 library(plyr)
 library(lubridate)
 library(DMwR)
-library(dprep)
+#library(dprep)
 library(Rlof)
 
 # use R script file frome github
@@ -114,7 +114,8 @@ Unzero_diff <- function(a){
 k_step <- 12 # 进行一次识别考虑的时间长度
 
 closeAllConnections()
-lof_dac<-data.frame()
+lof_dac <- data.frame()
+lof_steering <- data.frame()
 
 for (i in 1:length(driverID)) {
   driver_i <- subset(Data_xiashan,driver_ID == driverID[i])
@@ -143,13 +144,17 @@ for (i in 1:length(driverID)) {
   driver_i$steering_diff <-as.numeric(driver_i$steering_diff)
   driver_i$steering_diff_lof <- lof(driver_i$steering_diff,k)
   
-  lofNum <- length(driver_i$Brake_diff_lof)*0.05
+  lofNum <- length(driver_i$Brake_diff_lof)*0.10
   #选择5%lof异常因子最大的数据
   c <- order(driver_i$Brake_diff_lof,decreasing = T) 
   c <- c[1:lofNum]
   d <- driver_i[c,] # 选择排序为5%的异常值
   d <- subset(d,accZMS2<0)
   lof_dac<-rbind(d,lof_dac)
+  c <- order(driver_i$steering_diff_lof,decreasing = T) 
+  c <- c[1:lofNum]
+  d <- driver_i[c,] # 选择排序为5%的异常值
+  lof_steering<-rbind(d,lof_steering)
   print(i)
   #print(length(subset(driver_i,Brake_diff_lof > 2)$Brake_diff_lof))
   #print(quantile(driver_i$Brake_diff_lof,probs=c(0.95),na.rm = TRUE))

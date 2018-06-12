@@ -40,6 +40,7 @@ source_url("https://raw.githubusercontent.com/githubmao/RiohDS/master/DataInput.
 pass_off <- as.data.frame(str_locate_all(file_dir,"/"))
 pass_off_2 <-pass_off$start[length(pass_off$start)]
 source(paste(str_sub(file_dir,1,pass_off_2),"basicFun.R",sep = ''))
+source(paste(str_sub(file_dir,1,pass_off_2),"DataInitialization.R",sep = ''))
 rm(pass_off,pass_off_2)
 
 #根据操作系统类型，在不同路径加载数据集
@@ -59,17 +60,17 @@ for (i in 1:length(data_file_Name)){
               header=T,sep=",",stringsAsFactors =FALSE )
   oneSec_temp <- oneSec_temp[,1:89]
   oneSec_temp <- RenameSimDataV12(oneSec_temp)
-  oneSec_temp <- subset(oneSec_temp, select=c("logTime",           
-  "disFromRoadStart",            
-  "speedKMH",
-  "yawAngle",
-  "accZMS2",   #纵向加速度   
-  "accXMS2",   #横向加速度     
-  "laneOffset",    
-  "appSteering",       
-  "appBrake",
-  "appGasPedal",
-  "logitudinalSlope")
+  oneSec_temp <- subset(oneSec_temp, select=c("logTime", 
+                                              "disFromRoadStart", 
+                                              "speedKMH",
+                                              "yawAngle",
+                                              "accZMS2",   #纵向加速度 
+                                              "accXMS2",   #横向加速度 
+                                              "laneOffset",
+                                              "appSteering", 
+                                              "appBrake",
+                                              "appGasPedal",
+                                              "logitudinalSlope")
   )
   # 将文件名拆分为行驶方向（上山或下山）与驾驶人编号
   # 注释：直接使用split函数得到的结果是一个列表，如果希望得到一个向量，可以使用unlist函数
@@ -246,6 +247,20 @@ for(i in 1:length(driverID)){
   ACC_abData <- rbind(b,ACC_abData)
 }
 rm(a,b,i)  
+
+
+# 调用anomaly_detection_lof.R文件，然后求交集
+
+pass_off <- as.data.frame(str_locate_all(file_dir,"/"))
+pass_off_2 <-pass_off$start[length(pass_off$start)]
+source(paste(str_sub(file_dir,1,pass_off_2),"Anomaly Detection/Anomaly_detction_lof.R",sep = ''))
+rm(pass_off,pass_off_2)
+
+dixon <- subset(downHill_abnormalAcc,driver_ID == 'S01')
+lof <- subset(lof_dac,driver_ID =='S01')
+dixon$disFromRoadStart <- floor(dixon$disFromRoadStart)
+
+inter_lof_dixon <- intersect(dixon$disFromRoadStart,lof$disFromRoadStart)
   
   
   
