@@ -142,7 +142,7 @@ for (i in 1:length(downHill_IDsplit))
   stepLen <- ceiling((max(aa$speedKMH)-min(aa$speedKMH))/groupNum)
   aa$group <- ceiling(aa$speedKMH/stepLen)
   #调用函数计算加速和减速异常标准
-  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.98)
+  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
   cc$driver_ID<-aa$driver_ID[i] #增加驾驶人ID列
   abnormal_acc<-rbind(cc,abnormal_acc)
 }
