@@ -1,20 +1,27 @@
-#----------------------------------------------------------------------------------------------
+# 脚本说明----------------------------------------------------------------------------------------------
 # 本程序用于北京冬奥会延庆赛区道路驾驶模拟试验数据分析
-# 
-# 0.0 获取当前脚本所在的目录名称----
-# 便于加载位于同一目录下的其它文件
+# 1. 对驾驶人群体，依据驾驶行为对驾驶人群体进行聚类
+# 2. 异常驾驶行为路段提取
+# 3. 分析结果的可视化
+# ===
 
-# 如果需要的包没有被安装，则安装需要的包
+# 0.0安装包、路径的初始化------------------------------------------------------------------------
+
 packages_needed <- c('outliers',
                      'rstudioapi',
                      'data.table',
                      'outliers',
                      'stringr',
                      'ggplot2',
-                     #'ggthemes',
+                     'ggthemes',
                      'devtools',
                      'plyr',
-                     'lubridate'
+                     'lubridate',
+                     'psych',
+                     'factoextra',
+                     'proxy',
+                     'cluster',
+                     'rgl'
                      )
 installed <- packages_needed %in% installed.packages()[, 'Package']
 if (length(packages_needed[!installed]) >=1){
@@ -46,7 +53,7 @@ source(paste(str_sub(file_dir,1,pass_off_2),"DataInitialization.R",sep = ''))
 rm(pass_off,pass_off_2)
 
 #根据操作系统类型，在不同路径加载数据集
-if(OStype == "Windows"){datafolder <- "D:\\PROdata\\Data\\simlogSGH"}
+if(OStype == "Windows"){datafolder <- "D:\\PROdata\\Data\\2018Olympics\\Driver_Data\\up"}
 if(OStype == "Linux"){datafolder <- "/home/zhwh/Data/2018Olympics/Driver_Data/up" }
 
 # 0.2 加载原始数据-------------------------------------------------------------------------
@@ -77,192 +84,159 @@ for (i in 1:length(data_file_Name)){
   # 将文件名拆分为行驶方向（上山或下山）与驾驶人编号
   # 注释：直接使用split函数得到的结果是一个列表，如果希望得到一个向量，可以使用unlist函数
   oneSec_temp$direction <- unlist( strsplit(data_name[i], "_"))[1]
-  oneSec_temp$driver_ID <- unlist( strsplit(data_name[i], "_"))[2]
+  oneSec_temp$driver_ID <- i
   allData_import<-rbind(oneSec_temp,allData_import)
 }
 rm(oneSec_temp)
 
-#1.0 利用累计频率筛选准则，筛选出现概率较小的异常值-----------------------------
+driverID <- unique(allData_import$driver_ID)
 
-#1.1. 定义函数fun_abnormalACC函数，计算加速和减速异常值标准-----------------------
-# speed_col等为传递的列名
-fun_abnormalACC<-function(simdata,speed_col,group_col,acc_col,gas_col,brake_col,probs=0.95)
-{
-  simdata$acc <- as.numeric(simdata[[acc_col]])
-  simdata$GasPedal <- as.numeric(simdata[[gas_col]])
-  simdata$Brake <- as.numeric(simdata[[brake_col]])
-  simdata$speed <- as.numeric(simdata[[speed_col]])
-  simdata$group <- as.numeric(simdata[[group_col]])
+# 1.0========================================================================================
+# 1.1 利用MDS方法对运行速度进行降维处理---------------------------------------------------
+#  以10米为间距，生成所有驾驶人的速度序列
+#  准备数据
+Dis_step = 10
+for (i in 1:length(driverID)){
+  driver_temp <- subset(allData_import, driver_ID == driverID[i], select = c("disFromRoadStart", "speedKMH"))
+  driver_temp <- Order.dis(driver_temp, 'disFromRoadStart', step = Dis_step)
   
-  AAC <- subset(simdata,acc >0 & GasPedal > 0)
-  DAC <- subset(simdata,acc <0 & Brake > 0)
-  
-  b1 <- subset(AAC,select = c("group","acc"))
-  b1 <- ddply(b1,.(group),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
-  
-  b2 <- subset(DAC,select = c("group","acc"))
-  b2 <- ddply(abs(b2),.(group),numcolwise(quantile),probs=c(probs),na.rm = TRUE)
-  
-  names(b1) <- c("group","abnormal_aac")
-  names(b2) <- c("group","abnormal_dac")
-  c <- merge(b1,b2,all=T)
-  c$speed_bottom <- 0
-  c$speed_top <- 0
-  for(i in 1:length(c$group)){
-    d <- subset(simdata,group == i)
-    c$speed_bottom[i] <- floor(min(d$speed))
-    c$speed_top[i] <- ceiling(max(d$speed))
+  if (i == 1){mds_driverData <- driver_temp}
+  else if (i >1){
+    col_names <- c(as.character(i-1), as.character(i))
+    print(col_names)
+    mds_driverData <- merge(mds_driverData, driver_temp, by='disFromRoadStart', suffixes = col_names)
   }
-  return(c)
+  else{}
 }
 
-#  1.1.0 数据分组与计算加速度异常值的测试代码--------
-# test_data <- subset(allData_import,direction =="xiashan" & driver_ID == "S06")
-# test_data <- subset(test_data,speedKMH >= 1)
-# # 将数据集分成相同长度的组别.
-# groupNum <- floor(length(test_data$speedKMH)/1000)
-# #ceiling向上取整，确定步长（floor为向下取整)
-# test_data$speedKMH <- as.numeric(test_data$speedKMH)
-# stepLen <- ceiling((max(test_data$speedKMH)-min(test_data$speedKMH))/groupNum)
-# test_data$group <- ceiling(test_data$speedKMH/stepLen)
-# ab_acc <- fun_abnormalACC(test_data,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
 
-# 1.1.1 计算下山方向的加速度异常值判断标准-----------
-all_downHill <- subset(allData_import,direction =="xiashan")
-downHill_IDsplit<-split(all_downHill,list(all_downHill$driver_ID))#按照驾驶人ID分割数据
-abnormal_acc<-data.frame()
-for (i in 1:length(downHill_IDsplit))
-{
-  #选择一个驾驶人数据ID
-  aa<-data.frame(downHill_IDsplit[i])
-  #标准化数据框列名
-  names(aa)<-colnames(all_downHill)
-  # 将数据集分成相同长度的组别.
-  groupNum <- floor(length(aa$speedKMH)/1000)
-  #ceiling向上取整，确定步长（floor为向下取整)
-  aa$speedKMH <- as.numeric(aa$speedKMH)
-  stepLen <- ceiling((max(aa$speedKMH)-min(aa$speedKMH))/groupNum)
-  aa$group <- ceiling(aa$speedKMH/stepLen)
-  #调用函数计算加速和减速异常标准
-  cc<-fun_abnormalACC(aa,"speedKMH","group","accZMS2","appGasPedal","appBrake",probs=0.95)
-  cc$driver_ID<-aa$driver_ID[i] #增加驾驶人ID列
-  abnormal_acc<-rbind(cc,abnormal_acc)
+library(MASS)
+
+mds_data.matrix<-t(as.matrix(mds_driverData[, c(-1)])) #将驾驶人特征数据框转化为矩阵
+
+ID_dist<-mds_data.matrix %*% t(mds_data.matrix) #采用矩阵相乘的方式
+#ID_dist<-(mds_data.matrix)  #不采用矩阵相乘的方式
+ID_dist<-dist(ID_dist,method="euclidean" ) #计算欧式距离
+
+#采用标准MDS分析,k是降维后数据的维度
+ID_MDS<-cmdscale(ID_dist,k=2,eig=T) 
+ID_MDS_3D<-cmdscale(ID_dist,k=3,eig=T) 
+#ID_MDS<-isoMDS(ID_dist) #非参数iso分析
+
+
+#这是为了检测能否用两个维度的距离来表示高维空间中距离，如果达到了0.8左右则表示是合适的。
+sum(abs(ID_MDS$eig[1:2]))/sum(abs(ID_MDS$eig))
+sum((ID_MDS$eig[1:2])^2)/sum((ID_MDS$eig)^2)
+
+# 汇总mds降维分析的结果，作为聚类分析的基础
+# 降维为2D
+mds_result <- data.frame(ID_MDS$points[,1], ID_MDS$points[,2], driverID)
+names(mds_result) <- c('dimension1', 'dimension2', 'driver_ID')
+row.names(mds_result) <- mds_result$driver_ID
+
+# 降维为3D
+mds_result_3D <- data.frame(ID_MDS_3D$points[,1], ID_MDS_3D$points[,2], ID_MDS_3D$points[,3], driverID)
+names(mds_result_3D) <- c('dimension1', 'dimension2', 'dimension3','driver_ID')
+row.names(mds_result_3D) <- mds_result$driver_ID
+# 方便制图，将驾驶人ID字段转化为因子类型
+mds_result$driver_ID <- as.factor(mds_result$driver_ID)
+mds_result_3D$driver_ID <- as.factor(mds_result_3D$driver_ID)
+
+ggplot(data=mds_result,aes(x=dimension1, y=dimension2, group=driver_ID))+
+  geom_point(shape=16,size=8, aes(colour=driver_ID))+
+  geom_text(alpha=0.5,colour="black",size=4,aes(label=mds_result$driver_ID))+
+  theme_gdocs()
+# 绘制降维至三维空间的可视化展示
+# library(rgl)
+# plot3d(mds_result_3D$dimension1, mds_result_3D$dimension2, mds_result_3D$dimension3,
+#        col = 'red', type="s", size=1.5, lit=FALSE, xlab = "X", ylab="Y", zlab = "Z")
+# 
+# surface3d(mds_result_3D$dimension1, mds_result_3D$dimension2, mds_result_3D$dimension3,
+#           alpha=0.4, front="lines", back="lines")
+# 
+# movie3d(spin3d(axis=c(0,0,1),rpm=3),duration=10,fps=50)
+
+# 2.0=================================================================================================
+# 2.0使用聚类方法，将不同驾驶人的运行速度特征聚类为不同的驾驶人群体分类=============================
+
+# 2.1计算相关系数矩阵------------------------------------------------------------------------------
+data_cor <- mds_driverData[, c(-1)]
+names(data_cor) <- as.character(driverID)
+driver_speed_cor<-cor(data_cor)
+rm(data_cor)
+
+# 2.2 利用k聚类方法对驾驶人群体进行聚类======================================================================
+library(proxy)
+library(cluster)
+library(factoextra)
+
+# 对mds结果进行归一化处理
+
+mds_result$dimension1 <- (mds_result$dimension1-min(mds_result$dimension1))/
+  (max(mds_result$dimension1)-min(mds_result$dimension1))
+mds_result$dimension2 <- (mds_result$dimension2-min(mds_result$dimension2))/
+  (max(mds_result$dimension2)-min(mds_result$dimension2))
+
+# 使用函数clusGap()来计算用于估计最优聚类数。函数fviz_gap_stat()用于可视化。
+set.seed(123)
+# 计算不同K值的效度
+gap_stat <- clusGap(mds_result[1:2], FUN = kmeans, nstart = 5, K.max = 10, B = 500)
+# 用折线图可视化K值效度变化趋势
+fviz_gap_stat(gap_stat)
+#K均值聚类函数
+cluster_model <- kmeans(mds_result[1:2], centers=3, nstart = 5)
+#用可视化方法分析聚类结果
+fviz_cluster(cluster_model, mds_result[1:2])
+
+# 利用增强聚类eclust函数调用层次聚类方法"hclust"进行聚类
+res.km = eclust(mds_result[1:2],k = NULL, k.max = 10, FUNcluster="hclust")
+
+# eclust聚类的可视化
+fviz_gap_stat(res.km$gap_stat)
+fviz_cluster(res.km,mds_result[1:2]) # scatter plot
+
+mds_result$cluster <- res.km$cluster
+cluster_result <- mds_result[, c(-1, -2)]
+
+# 2.3 将聚类结果merge进导入的原始数据============================================
+# 为了merge，将驾驶人ID转化为与导入原始数据框一致的整型数据
+cluster_result$driver_ID <- as.numeric(as.character(cluster_result$driver_ID))
+allData_clustered <- merge(allData_import, cluster_result, by='driver_ID',all = TRUE)
+cluster_group <- unique(cluster_result$cluster)  # 聚类标签数组
+
+
+# 3.0=============================================================================
+# 3.1 按照聚类结果分别分析
+
+cluster1 <- subset(allData_clustered, cluster == cluster_group[2])
+cluste1_driverID <- unique(cluster1$driver_ID)
+
+cluste1_step <- data.frame()
+Dis_step = 1
+
+for (i in 1:length(cluste1_driverID)){
+  driver_temp <- subset(cluster1, driver_ID == cluste1_driverID[i],
+                        select = c("disFromRoadStart", "speedKMH", 'driver_ID'))
+  driver_temp <- Order.dis(driver_temp, 'disFromRoadStart', step = Dis_step)
+  cluste1_step <- rbind(driver_temp,cluste1_step)
 }
-rm(cc,aa,i)
+rm(driver_temp)
 
-# 1.1.1.1 筛选加速度异常的数据--------------
-driverID <- unique(all_downHill$driver_ID)
-downHill_abnormalAcc <- data.frame()
-# downHill_accSD<-split(abnormal_acc,list(abnormal_acc$driver_ID))#按照驾驶人ID分割数据
-for (i in 1:length(driverID)) {
-  #  选择一个驾驶人数据ID
-  aa<-subset(all_downHill,driver_ID == driverID[i])
-  aa$speedKMH <- as.numeric(aa$speedKMH)
-  aa$accZMS2 <- as.numeric(aa$accZMS2)
-  accSD_driverID <- subset(abnormal_acc,driver_ID == driverID[i])
-  #  筛选异常数据
-  a <- data.frame()
-  for (j in 1:length(accSD_driverID$group)) {
-    #  筛选加速过程加速度异常
-    aa_acc <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
-                       speedKMH > accSD_driverID$speed_bottom[j] &
-                       accZMS2 >= accSD_driverID$abnormal_aac[j])
-    aa_acc$type <- "acc_A"
-    aa_acc$anbormalSD <- accSD_driverID$abnormal_aac[j]
-    #  筛选减速过程加速度异常  
-    aa_dac <- subset(aa,speedKMH <= accSD_driverID$speed_top[j] & 
-                       speedKMH > accSD_driverID$speed_bottom[j] &
-                       accZMS2 < 0 &
-                       abs(accZMS2) >= accSD_driverID$abnormal_dac[j])
-    aa_dac$type <- "acc_D"
-    aa_dac$anbormalSD <- accSD_driverID$abnormal_dac[j]
-    a <- rbind(aa_acc,a)
-    a <- rbind(aa_dac,a)
-  }
-  downHill_abnormalAcc <- rbind(a,downHill_abnormalAcc)
-  rm(a)
-}
-rm(aa,aa_acc,aa_dac,accSD_driverID,downHill_IDsplit,i,j)
+library(ggplot2)
 
-# 1.1.1.2 根据异常行为分布的点判断异常驾驶行为发生的路段,合并很接近的异常点，处理成异常行为路段-----------
-# 定义函数fun_ACC_abData 计算指定驾驶人编号和类型的异常驾驶行为路段
-# 参数表：
-  # a 为经过driver_ID和type筛选的异常驾驶行为数据点集
-  # timeDiff_SD为数据间隔多长时间视为不同的路段
-
-fun_ACC_abData <- function(a,timeDiff_SD){
-  a$disFromRoadStart <- as.numeric(a$disFromRoadStart)
-  a$logTime <- ymd_hms(a$logTime)
-  a <- a[order(a$logTime),]
-  a$dis_diff <- abs(c(0,diff(a$disFromRoadStart)))
-  a$time_diff <- c(0,diff(a$logTime))
-  # 生成异常行为路段一览表
-  # 给所有的异常行为数据排序，添加编号
-  a$rowNum <- seq(1,length(a$logTime),1)
-  # 选择相邻时间大于10S的作为不同路段的判别，小于10s的作为一个路段处理
-  aa <-subset(a,time_diff > timeDiff_SD)
-  # 提取路段发生变换时数据的行编号
-  if(max(aa$rowNum) < length(a$rowNum)){
-    rowNumber <-c(1,aa$rowNum,length(a$rowNum))
-  }
-  if(max(aa$rowNum) == length(a$rowNum)){
-    rowNumber <-c(1,aa$rowNum)
-  }
-  #定义一个储存异常行为路段的数据框
-  Acc_colnames <- c("start","end","len","drive_time","speed_mean","adType","dac_max")
-  ACC_abData <- data.frame(matrix(0, ncol = length(Acc_colnames),nrow = (length(rowNumber)-1)))
-  names(ACC_abData) <- Acc_colnames
-  for(i in 1:(length(rowNumber)-1)){
-    ACC_abData$start[i] <- a$disFromRoadStart[rowNumber[i]]
-    ACC_abData$end[i] <- a$disFromRoadStart[rowNumber[i+1]-1]
-    if(ACC_abData$start[i] == ACC_abData$end[i ]){
-      ACC_abData$len[i] <- 1
-      ACC_abData$drive_time[i] <- 0
-      ACC_abData$speed_mean[i] <- a$speedKMH[rowNumber[i]]
-      ACC_abData$adType[i] <- a$type[rowNumber[i]]
-      ACC_abData$dac_max[i] <- abs(a$accZMS2[rowNumber[i]])
-    }
-    if(abs(ACC_abData$end[i]-ACC_abData$start[i]) > 0){
-      ACC_abData$len[i] <- a$disFromRoadStart[rowNumber[i+1]-1] - a$disFromRoadStart[rowNumber[i]]
-      ACC_abData$drive_time[i] <- a$logTime[rowNumber[i+1]-1]- a$logTime[rowNumber[i]]
-      ACC_abData$speed_mean[i] <- mean(subset(a,rowNum < rowNumber[i+1] & 
-                                                rowNum > rowNumber[i])$speedKMH)
-      ACC_abData$adType[i] <- a$type[rowNumber[i]]
-      ACC_abData$dac_max[i] <- abs(max(subset(a,rowNum < rowNumber[i+1] & 
-                                                rowNum > rowNumber[i])$accZMS2))
-    }
-    #if(i=)
-  }
-  ACC_abData$len <- abs(ACC_abData$len)
-  return(ACC_abData)
-}
-
-# 计算不同驾驶人下山方向异常驾驶行为路段的合集
-ACC_abData <- data.frame()
-for(i in 1:length(driverID)){
-  #print(i)
-  a <- subset(downHill_abnormalAcc,driver_ID == driverID[i] &
-                type == "acc_D")
-  b <- fun_ACC_abData(a,10) #调用函数计算异常驾驶行为路段
-  b$direction <- "xiashan"
-  b$driver_ID <- driverID[i]
-  ACC_abData <- rbind(b,ACC_abData)
-}
-rm(a,b,i)  
+allData_import_step$driver_ID <- as.factor(allData_import_step$driver_ID)
 
 
-# 调用anomaly_detection_lof.R文件，然后求交集
+ggplot(data=cluste1_step, aes(x=disFromRoadStart,y=speedKMH, colour=driver_ID))+
+  geom_point()+
+  facet_wrap(~driver_ID,nrow=3)+
+  labs(x="Location",y="speed(km/h)",title="speed - Dis")
 
-pass_off <- as.data.frame(str_locate_all(file_dir,"/"))
-pass_off_2 <-pass_off$start[length(pass_off$start)]
-source(paste(str_sub(file_dir,1,pass_off_2),"Anomaly Detection/Anomaly_detction_lof.R",sep = ''))
-rm(pass_off,pass_off_2)
 
-dixon <- subset(downHill_abnormalAcc,driver_ID == 'S01')
-lof <- subset(lof_dac,driver_ID =='S01')
-dixon$disFromRoadStart <- floor(dixon$disFromRoadStart)
+# 4.0 求解同一类驾驶人，运行速度的安全标准
 
-inter_lof_dixon <- intersect(dixon$disFromRoadStart,lof$disFromRoadStart)
+
+
   
   
   
